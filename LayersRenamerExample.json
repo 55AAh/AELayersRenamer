@@ -1,0 +1,30 @@
+{
+    "version": "0.1",
+    "templates": {
+        "1": {
+            "name": "1",
+            "color": 1,
+            "UID": 1
+        },
+        "2": {
+            "name": "2",
+            "color": 2,
+            "UID": 2
+        },
+        "3": {
+            "name": "3",
+            "color": 3,
+            "UID": 3
+        },
+        "4": {
+            "name": "4",
+            "color": 4,
+            "UID": 4
+        },
+        "5": {
+            "name": "5",
+            "color": 5,
+            "UID": 5
+        }
+    }
+}
