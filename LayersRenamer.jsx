@@ -197,6 +197,44 @@ function makeColorPalette(window, brushes, onSelected) {
     }
 }
 
+// This could be used in onDraw()
+function drawRoundedRect(graphics, brush, width, height, corner, x, y) {
+    graphics.newPath();
+    graphics.ellipsePath(x, y, corner, corner);
+    graphics.fillPath(brush);
+    graphics.ellipsePath(width - x - corner, y, corner, corner);
+    graphics.fillPath(brush);
+    graphics.ellipsePath(
+        width - x - corner,
+        height - y - corner,
+        corner,
+        corner
+    );
+    graphics.fillPath(brush);
+    graphics.ellipsePath(x, height - y - corner, corner, corner);
+    graphics.fillPath(brush);
+    graphics.newPath();
+
+    var coords = [
+        [x, y + corner / 2],
+        [x + corner / 2, y],
+        [width - x - corner / 2, y],
+        [width - x, y + corner / 2],
+        [width - x, height - y - corner / 2],
+        [width - x - corner / 2, height - y],
+        [x + corner / 2, height - y],
+        [x, height - y - corner / 2],
+    ];
+
+    graphics.moveTo(coords[0][0], coords[0][1]);
+
+    for (i = 1; i <= coords.length - 1; i++) {
+        graphics.lineTo(coords[i][0], coords[i][1]);
+    }
+
+    graphics.fillPath(brush);
+}
+
 // This is equivalent to a JS' String.trim()
 // It removes leading & trailing whitespaces
 function trimString(str) {
@@ -575,14 +613,27 @@ function buildUI_mainPanel(panel) {
 
     // This deletes the existing template buttons, and (re)creates them from the templates{} dict
     function recreateButtons() {
+        var templateButtonsCount = Object.keys(templates).length;
+        var totalHeight = templateButtonsCount * 35 + 20;
+        templateButtonsGroup.size = { width: 160, height: totalHeight + 20 };
+
         prev_panel = templateButtonsGroup.children[0];
         if (prev_panel !== undefined) {
             templateButtonsGroup.remove(prev_panel); // Delete the existing panel
         }
         // And (re)creates the panel (see templateButtonsGroup's group comments)
-        var templateButtonsPanel = templateButtonsGroup.add(
-            "panel",
-            [0, 0, 200, 400]
+        var templateButtonsPanel = templateButtonsGroup.add("panel", [
+            0,
+            0,
+            160,
+            totalHeight,
+        ]);
+
+        // The black pen will be used for buttons' text
+        var blackPen = panel.graphics.newPen(
+            panel.graphics.PenType.SOLID_COLOR,
+            [0, 0, 0, 1],
+            1
         );
 
         // This counter provides the index for each template button
@@ -596,13 +647,39 @@ function buildUI_mainPanel(panel) {
             // May be replaced in future by a more complex and customizable layout
             buttonOffsetY = (cnt - 1) * 35;
             buttonPosition = [5, 10 + buttonOffsetY, 150, 40 + buttonOffsetY];
-            buttonText =
-                currentTemplate.name + " (" + currentTemplate.color + ")";
+            buttonText = currentTemplate.name;
             var button = templateButtonsPanel.add(
                 "button",
                 buttonPosition,
                 buttonText
             );
+
+            function wrap_onDraw(_color_i) {
+                return function () {
+                    with (this) {
+                        graphics.drawOSControl();
+                        var brush = paletteBrushes[_color_i];
+                        var textSize = graphics.measureString(text);
+                        drawRoundedRect(
+                            graphics,
+                            brush,
+                            size.width,
+                            size.height,
+                            15,
+                            0,
+                            0
+                        );
+                        graphics.drawString(
+                            text,
+                            blackPen,
+                            (size.width - textSize.width) / 2,
+                            text.length > 1 ? 0 : 5
+                        );
+                    }
+                };
+            }
+
+            button.onDraw = wrap_onDraw(currentTemplate.color);
 
             // This wrapper is needed to capture value of variable template
             function wrap_onClick(clicked_template) {
