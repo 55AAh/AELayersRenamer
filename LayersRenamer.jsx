@@ -296,16 +296,20 @@ function copyToTemplate(source, target) {
 }
 
 var wasSaved = false;
-var currentFileVersion = undefined;
+var currentFileVersion = 0;
+
+var fileSectionTag = scriptName;
+var fileKeyTag = "dataFilePath";
 
 // This function ensures that file is selected, then opens it with the required R/W mode
 function openFile(save) {
-    const sectionTag = scriptName;
-    const keyTag = "dataFilePath";
     function getPathFromPrefs() {
-        if (app.settings.haveSetting(sectionTag, keyTag)) {
+        if (app.settings.haveSetting(fileSectionTag, fileKeyTag)) {
             // Load path from saved Preferences
-            var dataFilePath = app.settings.getSetting(sectionTag, keyTag);
+            var dataFilePath = app.settings.getSetting(
+                fileSectionTag,
+                fileKeyTag
+            );
 
             if (!dataFilePath) {
                 return undefined;
@@ -321,11 +325,11 @@ function openFile(save) {
     }
 
     function savePathToPrefs(file) {
-        app.settings.saveSetting(sectionTag, keyTag, file.fsName);
+        app.settings.saveSetting(fileSectionTag, fileKeyTag, file.fsName);
     }
 
     function saveUndefToPrefs(file) {
-        app.settings.saveSetting(sectionTag, keyTag, "");
+        app.settings.saveSetting(fileSectionTag, fileKeyTag, "");
     }
 
     function getPathFromUser() {
@@ -386,6 +390,13 @@ function openFile(save) {
     return undefined;
 }
 
+// This effectively forgets the path to a file, leaving templates unsaved
+function unlinkFile() {
+    app.preferences.deletePref("Settings_" + fileSectionTag, fileKeyTag);
+    wasSaved = false;
+    currentFileVersion = 0;
+}
+
 function loadFromFile(checkFileVersion) {
     // Obtaining file object
     var file = openFile(false);
@@ -398,6 +409,11 @@ function loadFromFile(checkFileVersion) {
     file.open("r");
     dataStr = file.read();
     file.close();
+
+    // This is needed to bypass version check on a newly created file
+    if (checkFileVersion && !dataStr) {
+        return currentFileVersion;
+    }
 
     // Deserializing
     try {
@@ -493,7 +509,7 @@ function saveToFile(templates) {
         discardLocalChanges = confirm("Do you want to discard local changes?");
         if (discardLocalChanges) {
             // Reloading from file, discarding changes
-            currentFileVersion = undefined;
+            currentFileVersion = 0;
             loadedTemplates = loadFromFile();
             return loadedTemplates;
         } else {
@@ -700,8 +716,11 @@ function buildUI_mainPanel(panel) {
     // This creates a button that will reload file from saved copy
     panel.reloadSavedCopyButton = panel.add("button", [55, 5, 80, 35], "R");
 
+    // This creates a button that will change the path to a file
+    panel.unlinkButton = panel.add("button", [85, 5, 110, 35], "X");
+
     // This creates a text that will indicate whether local version was saved to file
-    panel.wasSavedText = panel.add("statictext", [85, 5, 130, 35], "");
+    panel.wasSavedText = panel.add("statictext", [115, 5, 160, 35], "");
 
     // This is wrapper group for an actual panel that contains template buttons
     // This way, instead of deleting many children (buttons) from panel,
@@ -866,6 +885,11 @@ function buildUI_mainPanel(panel) {
     panel.reloadSavedCopyButton.onClick = function () {
         var newTemplates = loadFromFile();
         templates = newTemplates;
+        recreateButtons();
+    };
+
+    panel.unlinkButton.onClick = function () {
+        unlinkFile();
         recreateButtons();
     };
 
