@@ -14,9 +14,12 @@ This helps to reduce the amount of repetitive manual labor in consecutive tasks.
 
 1. Run script file / open dockable panel
 2. Select a file to store templates
-3. Press `New`, then specify the name & label color of a new template, and press `Add`
+3. Press `+`, then specify the name & label color of a new template, and press `Add`
 4. Apply template to selected layer(s) by _left-clicking_ the template button
 5. Edit/delete existing templates by _right-clicking_ the template buttons
+6. Change columns of existing templates by _middle-clicking_ the template buttons
+7. Press `R` to reload changes from file
+8. Press `X` to forget path to the file (note that this doesn't delete the actual file)
 
 ## Installation
 

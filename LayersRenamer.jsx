@@ -1,5 +1,5 @@
 var scriptName = "LayersRenamer";
-var scriptVersion = "0.1";
+var scriptVersion = "0.2";
 
 //
 // ---------- MINIFIED json2.js ----------
@@ -29,6 +29,9 @@ if (!Object.keys) {
         return result;
     };
 }
+
+// This flag is needed to correctly draw GUI
+var isDockable = false;
 
 // This function checks if script can write files.
 // If it can, control is passed to onSuccess() callback.
@@ -293,6 +296,7 @@ function UID_get(template) {
 function copyToTemplate(source, target) {
     target.name = source.name;
     target.color = source.color;
+    target.column = source.column;
 }
 
 var wasSaved = false;
@@ -439,20 +443,39 @@ function loadFromFile(checkFileVersion) {
             currentFileVersion = loadedFileVersion;
         }
 
-        newTemplates = {};
         loadedTemplates = data.templates;
+
+        // Convert dict from v0.1 to list
+        if (loadedTemplates.constructor.name == "Object") {
+            var loadedBareTemplates = [];
+            loadedTemplates_UIDs = Object.keys(loadedTemplates);
+            for (var i = 0; i < loadedTemplates_UIDs.length; i++) {
+                loadedTemplate_UID = loadedTemplates_UIDs[i];
+                loadedTemplate = loadedTemplates[loadedTemplate_UID];
+
+                // Copying to avoid modifying template
+                var bareTemplate = {};
+                copyToTemplate(loadedTemplate, bareTemplate);
+                // We don't need to save UIDs
+                delete bareTemplate.UID;
+
+                loadedBareTemplates.push(bareTemplate);
+            }
+        } else {
+            var loadedBareTemplates = loadedTemplates;
+        }
+
+        newTemplates = {};
         UID_templateCount = 0;
-        loadedTemplates_UIDs = Object.keys(loadedTemplates);
-        for (var i = 0; i < loadedTemplates_UIDs.length; i++) {
-            loadedTemplate_UID = loadedTemplates_UIDs[i];
-            loadedTemplate = loadedTemplates[loadedTemplate_UID];
+        for (var i = 0; i < loadedBareTemplates.length; i++) {
+            var bareTemplate = loadedBareTemplates[i];
 
-            // Copying template to assign new UID
-            newTemplate = {};
-            copyToTemplate(loadedTemplate, newTemplate);
+            // Copying to avoid modifying bareTemplate
+            var newTemplate = {};
+            copyToTemplate(bareTemplate, newTemplate);
 
-            // Adding new template to the collection
-            newTemplate_UID = UID_get(newTemplate);
+            // Assigning UID to new template
+            var newTemplate_UID = UID_get(newTemplate);
             newTemplates[newTemplate_UID] = newTemplate;
         }
 
@@ -528,11 +551,26 @@ function saveToFile(templates) {
     }
 
     // Serializing
+    var bareTemplates = [];
+    templates_UIDs = Object.keys(templates);
+    for (var i = 0; i < templates_UIDs.length; i++) {
+        var template_UID = templates_UIDs[i];
+        var template = templates[template_UID];
+
+        // Copying to avoid modifying template
+        var bareTemplate = {};
+        copyToTemplate(template, bareTemplate);
+        // We don't need to save UIDs
+        delete bareTemplate.UID;
+
+        bareTemplates.push(bareTemplate);
+    }
+
     currentFileVersion += 1;
     data = {
         version: scriptVersion,
         fileVersion: currentFileVersion,
-        templates: templates,
+        templates: bareTemplates,
     };
     dataStr = JSON.stringify(data, undefined, 4);
 
@@ -703,54 +741,185 @@ function buildUI_editTemplateDlg_show(
 
 // This shows a scripts main panel (dockable)
 function buildUI_mainPanel(panel) {
-    panel.preferredSize = { width: 205, height: 240 };
-    panel.layout.layout(true);
+    // GUI customization
+    var usePanels = false;
+    var templateButtonLRMargins = 10;
+    var templateButtonUDMargins = 10;
+    var templateButtonHeight = 40;
 
-    // Creates a set of brushes used to paint colored buttons
-    var paletteBrushes = makePaletteBrushes(panel);
-
-    // This creates a button that allow the user to add new templates
-    // It will open a dialog box where the user will specify template's name and (optionally) color
-    panel.addButton = panel.add("button", [5, 5, 50, 35], "New");
-
-    // This creates a button that will reload file from saved copy
-    panel.reloadSavedCopyButton = panel.add("button", [55, 5, 80, 35], "R");
-
-    // This creates a button that will change the path to a file
-    panel.unlinkButton = panel.add("button", [85, 5, 110, 35], "X");
-
-    // This creates a text that will indicate whether local version was saved to file
-    panel.wasSavedText = panel.add("statictext", [115, 5, 160, 35], "");
-
-    // This is wrapper group for an actual panel that contains template buttons
-    // This way, instead of deleting many children (buttons) from panel,
-    // we delete the panel itself (one child), and then recreate it in this group
-    var templateButtonsGroup = panel.add("group", [5, 40, 205, 240]);
+    // Useful values
+    var usePanelsMargin = usePanels ? 2 * 2 : 0;
+    var usePanelsTxt = usePanels ? "panel" : "group";
 
     // This is the dictionary that stores template objects, we retrieve it from saved copy
     // Template's UID is used as a key to allow easy deleting
     // For details see the UID_get() function's comments
     var templates = loadFromFile();
 
-    // This deletes the existing template buttons, and (re)creates them from the templates{} dict
-    function recreateButtons() {
-        panel.wasSavedText.text = wasSaved ? "" : "Unsaved";
+    // Splitting template buttons into columns based on specified values
+    function splitTemplatesIntoColumns() {
+        var columns = [];
+        templates_UIDs = Object.keys(templates);
+        for (var i = 0; i < templates_UIDs.length; i++) {
+            template_UID = templates_UIDs[i];
+            currentTemplate = templates[template_UID];
 
-        var templateButtonsCount = Object.keys(templates).length;
-        var totalHeight = templateButtonsCount * 35 + 20;
-        templateButtonsGroup.size = { width: 160, height: totalHeight + 20 };
+            var column = currentTemplate.column;
+            column = column ? column : 1;
 
-        prev_panel = templateButtonsGroup.children[0];
-        if (prev_panel !== undefined) {
-            templateButtonsGroup.remove(prev_panel); // Delete the existing panel
+            while (column > columns.length) {
+                columns.push([]);
+            }
+
+            columns[column - 1].push(currentTemplate);
         }
-        // And (re)creates the panel (see templateButtonsGroup's group comments)
-        var templateButtonsPanel = templateButtonsGroup.add("panel", [
-            0,
-            0,
-            160,
-            totalHeight,
-        ]);
+
+        return columns;
+    }
+
+    var columns = splitTemplatesIntoColumns();
+    panel.preferredSize[0] = Math.max(
+        170,
+        (isDockable ? 0 : 30) + 100 * columns.length
+    );
+    panel.layout.layout(true);
+
+    // Creates a set of brushes used to paint colored buttons
+    var paletteBrushes = makePaletteBrushes(panel);
+
+    // Main content group
+    var contentGroup = panel.add(usePanelsTxt, [
+        0,
+        0,
+        panel.size[0],
+        panel.size[1],
+    ]);
+
+    // This group contains header
+    var headerGroup = contentGroup.add(usePanelsTxt, [
+        0,
+        0,
+        contentGroup.size[0],
+        0,
+    ]);
+
+    // This group contains control buttons
+    var controlButtonsGroup = headerGroup.add(usePanelsTxt, [
+        0,
+        0,
+        0,
+        40 + usePanelsMargin,
+    ]);
+    headerGroup.size[1] = controlButtonsGroup.size[1] + usePanelsMargin;
+
+    // This creates a button that allow the user to add new templates
+    // It will open a dialog box where the user will specify template's name and (optionally) color
+    var _x = 5;
+    controlButtonsGroup.addButton = controlButtonsGroup.add(
+        "button",
+        [_x, 5, _x + 25, 35],
+        "+"
+    );
+    _x += controlButtonsGroup.addButton.size[0];
+
+    // This creates a button that will reload file from saved copy
+    _x += 5;
+    controlButtonsGroup.reloadSavedCopyButton = controlButtonsGroup.add(
+        "button",
+        [_x, 5, _x + 25, 35],
+        "R"
+    );
+    _x += controlButtonsGroup.reloadSavedCopyButton.size[0];
+
+    // This creates a button that will change the path to a file
+    _x += 5;
+    controlButtonsGroup.unlinkButton = controlButtonsGroup.add(
+        "button",
+        [_x, 5, _x + 25, 35],
+        "X"
+    );
+    _x += controlButtonsGroup.unlinkButton.size[0];
+    controlButtonsGroup.size[0] = _x + 5 + usePanelsMargin;
+
+    // This creates a text that will indicate whether local version was saved to file
+    headerGroup.wasSavedText = headerGroup.add(
+        "statictext",
+        [0, 5 + usePanelsMargin, 45, 35],
+        ""
+    );
+
+    // This is wrapper group for an actual inner group that contains template buttons
+    // This way, instead of deleting many children (buttons) from contentGroup,
+    // we delete the inner group itself (one child), and then recreate it in wrapper group
+    var templateButtonsGroup = contentGroup.add(usePanelsTxt, [
+        0,
+        headerGroup.size[1],
+        0,
+        0,
+    ]);
+
+    // This deletes the existing template buttons, and (re)creates them from the templates{} dict
+    function rebuildUI() {
+        headerGroup.wasSavedText.text = wasSaved ? "" : "Unsaved";
+
+        // Deletes the existing inner group if it exists
+        prevInner = templateButtonsGroup.children[0];
+        if (prevInner !== undefined) {
+            templateButtonsGroup.remove(prevInner);
+        }
+        // And (re)creates the panel (see templateButtonsGroup's comments)
+        var templateButtonsInnerGroup = templateButtonsGroup.add(
+            usePanelsTxt,
+            [0, 0, 0, 0]
+        );
+
+        columns = splitTemplatesIntoColumns();
+
+        // Calculating the number in the biggest column
+        var columnsCount = columns.length;
+        var rowsCount = 0;
+        for (var j = 0; j < columnsCount; j++) {
+            buttonsInColumn = columns[j].length;
+            if (buttonsInColumn > rowsCount) {
+                rowsCount = buttonsInColumn;
+            }
+        }
+
+        // Adjusting sizes
+        var totalButtonsHeight =
+            templateButtonUDMargins +
+            (templateButtonUDMargins + templateButtonHeight) * rowsCount;
+
+        contentGroup.size[0] =
+            panel.size[0] -
+            usePanelsMargin -
+            (isDockable ? 0 : 30) -
+            (usePanels ? 0 : 3);
+        templateButtonsGroup.size[0] = headerGroup.size[0] =
+            contentGroup.size[0] - usePanelsMargin;
+        controlButtonsGroup.location.x =
+            (headerGroup.size[0] -
+                usePanelsMargin -
+                controlButtonsGroup.size[0]) /
+            2;
+        headerGroup.wasSavedText.location[0] =
+            controlButtonsGroup.location.x + controlButtonsGroup.size[0] + 5;
+        templateButtonsInnerGroup.size[0] =
+            templateButtonsGroup.size[0] - usePanelsMargin;
+
+        templateButtonsInnerGroup.size[1] =
+            totalButtonsHeight + usePanelsMargin * 2;
+        templateButtonsGroup.size[1] =
+            templateButtonsInnerGroup.size[1] + usePanelsMargin;
+        contentGroup.size[1] =
+            headerGroup.size[1] +
+            templateButtonsGroup.size[1] +
+            usePanelsMargin;
+
+        // Resizing panel
+        panel.size[1] = contentGroup.size[1] + (isDockable ? 0 : 30);
+        // For some weird reason, this specific object becomes invalid, so we have to obtain it again
+        templateButtonsInnerGroup = templateButtonsGroup.children[0];
 
         // The black pen will be used for buttons' text
         var blackPen = panel.graphics.newPen(
@@ -759,107 +928,176 @@ function buildUI_mainPanel(panel) {
             1
         );
 
-        // This counter provides the index for each template button
-        // Note that it may differ from the template's UID
-        templates_UIDs = Object.keys(templates);
+        var columnWidth =
+            (templateButtonsInnerGroup.size[0] -
+                usePanelsMargin -
+                templateButtonLRMargins) /
+                columnsCount -
+            templateButtonLRMargins;
+        for (var j = 0; j < columnsCount; j++) {
+            var columnOffsetX =
+                templateButtonLRMargins +
+                (columnWidth + templateButtonLRMargins) * j;
+            var templateButtonsColumnGroup = templateButtonsInnerGroup.add(
+                usePanelsTxt,
+                [
+                    columnOffsetX,
+                    0,
+                    columnOffsetX + columnWidth,
+                    totalButtonsHeight + usePanelsMargin,
+                ]
+            );
+
+            var column = columns[j];
+            for (var i = 0; i < column.length; i++) {
+                currentTemplate = column[i];
+
+                // This places buttons in a column
+                // May be replaced in future by a more complex and customizable layout
+                buttonOffsetY =
+                    templateButtonUDMargins +
+                    (templateButtonUDMargins + templateButtonHeight) * i;
+                buttonText = currentTemplate.name;
+                var button = templateButtonsColumnGroup.add(
+                    "button",
+                    [
+                        0,
+                        buttonOffsetY,
+                        templateButtonsColumnGroup.size[0] - usePanelsMargin,
+                        buttonOffsetY + templateButtonHeight,
+                    ],
+                    buttonText
+                );
+
+                function wrap_onDraw(_color_i) {
+                    return function () {
+                        with (this) {
+                            graphics.drawOSControl();
+                            var brush = paletteBrushes[_color_i];
+                            var textSize = graphics.measureString(text);
+                            drawRoundedRect(
+                                graphics,
+                                brush,
+                                size.width,
+                                size.height,
+                                15,
+                                0,
+                                0
+                            );
+                            graphics.drawString(
+                                text,
+                                blackPen,
+                                (size.width - textSize.width) / 2,
+                                size.height / 2 -
+                                    textSize[1] +
+                                    (text.length == 1 ? 6 : 0)
+                            );
+                        }
+                    };
+                }
+
+                button.onDraw = wrap_onDraw(currentTemplate.color);
+
+                // This wrapper is needed to capture value of variable template
+                function wrap_onClick(clicked_template) {
+                    return function () {
+                        applyTemplate(clicked_template);
+                    };
+                }
+                button.onClick = wrap_onClick(currentTemplate);
+
+                // This wrapper is needed to capture value of variable current_template
+                function wrap_onRightClick(clicked_template) {
+                    return function (event) {
+                        if (event.button == 2) {
+                            // Right click
+                            // This will open a dialog in the 'Edit existing' mode
+                            // It will be able to modify the existing template object
+                            // But this is not done by it unless Save is clicked
+                            buildUI_editTemplateDlg_show(
+                                paletteBrushes,
+                                clicked_template,
+                                false, // Template is not new
+                                // onSave callback
+                                function (_same_template) {
+                                    // The original template object will be modified
+                                    // Update saved copy or discard changes
+                                    templates = saveToFile(templates);
+
+                                    // Update buttons list
+                                    rebuildUI();
+                                },
+                                // onDelete callback
+                                function () {
+                                    // Delete template from a dictionary
+                                    clicked_template_UID =
+                                        UID_get(clicked_template);
+                                    delete templates[clicked_template_UID];
+
+                                    // Update saved copy or discard changes
+                                    templates = saveToFile(templates);
+
+                                    // Update buttons list
+                                    rebuildUI();
+                                }
+                            );
+                        } else if (event.button == 1) {
+                            // Middle click
+                            // This will open a prompt to enter new column number
+                            var maxColumnsCount = 10;
+                            var newColumnStr = prompt(
+                                "Please enter new column number",
+                                "1",
+                                "Move to a different column"
+                            );
+                            newColumnStr = trimString(newColumnStr);
+                            if (newColumnStr) {
+                                newColumn = parseInt(newColumnStr);
+                                if (
+                                    newColumn &&
+                                    "" + newColumn == newColumnStr &&
+                                    newColumn >= 1 &&
+                                    newColumn <= maxColumnsCount
+                                ) {
+                                    clicked_template.column = newColumn;
+
+                                    // Update saved copy or discard changes
+                                    templates = saveToFile(templates);
+
+                                    // Update buttons list
+                                    rebuildUI();
+                                } else {
+                                    alert(
+                                        "Invalid column number: '" +
+                                            newColumnStr +
+                                            "'\nIt should be a number between 1 and " +
+                                            maxColumnsCount
+                                    );
+                                }
+                            }
+                        }
+                    };
+                }
+                button.addEventListener(
+                    "click",
+                    wrap_onRightClick(currentTemplate)
+                );
+            }
+        }
+
         for (var i = 0; i < templates_UIDs.length; i++) {
             template_UID = templates_UIDs[i];
             currentTemplate = templates[template_UID];
-
-            // This places buttons in a column
-            // May be replaced in future by a more complex and customizable layout
-            buttonOffsetY = i * 35;
-            buttonPosition = [5, 10 + buttonOffsetY, 150, 40 + buttonOffsetY];
-            buttonText = currentTemplate.name;
-            var button = templateButtonsPanel.add(
-                "button",
-                buttonPosition,
-                buttonText
-            );
-
-            function wrap_onDraw(_color_i) {
-                return function () {
-                    with (this) {
-                        graphics.drawOSControl();
-                        var brush = paletteBrushes[_color_i];
-                        var textSize = graphics.measureString(text);
-                        drawRoundedRect(
-                            graphics,
-                            brush,
-                            size.width,
-                            size.height,
-                            15,
-                            0,
-                            0
-                        );
-                        graphics.drawString(
-                            text,
-                            blackPen,
-                            (size.width - textSize.width) / 2,
-                            text.length > 1 ? 0 : 5
-                        );
-                    }
-                };
-            }
-
-            button.onDraw = wrap_onDraw(currentTemplate.color);
-
-            // This wrapper is needed to capture value of variable template
-            function wrap_onClick(clicked_template) {
-                return function () {
-                    applyTemplate(clicked_template);
-                };
-            }
-            button.onClick = wrap_onClick(currentTemplate);
-
-            // This wrapper is needed to capture value of variable current_template
-            function wrap_onRightClick(right_clicked_template) {
-                return function (event) {
-                    if (event.button == 2) {
-                        // Right click
-                        // This will open a dialog in the 'Edit existing' mode
-                        // It will be able to modify the existing template object
-                        // But this is not done by it unless Save is clicked
-                        buildUI_editTemplateDlg_show(
-                            paletteBrushes,
-                            right_clicked_template,
-                            false, // Template is not new
-                            // onSave callback
-                            function (_same_template) {
-                                // The original template object will be modified
-                                // Update saved copy or discard changes
-                                templates = saveToFile(templates);
-
-                                // Update buttons list
-                                recreateButtons();
-                            },
-                            // onDelete callback
-                            function () {
-                                // Delete template from a dictionary
-                                right_clicked_template_UID = UID_get(
-                                    right_clicked_template
-                                );
-                                delete templates[right_clicked_template_UID];
-
-                                // Update saved copy or discard changes
-                                templates = saveToFile(templates);
-
-                                // Update buttons list
-                                recreateButtons();
-                            }
-                        );
-                    }
-                };
-            }
-            button.addEventListener(
-                "click",
-                wrap_onRightClick(currentTemplate)
-            );
         }
     }
 
+    // Reacting to panel being resized
+    panel.onResize = function () {
+        rebuildUI();
+    };
+
     // Pressing this will open a dialogue that will allow the user to create a new template
-    panel.addButton.onClick = function () {
+    controlButtonsGroup.addButton.onClick = function () {
         newTemplate = {
             name: "",
             color: 0, // None
@@ -877,23 +1115,23 @@ function buildUI_mainPanel(panel) {
                 templates = saveToFile(templates);
 
                 // Update buttons list
-                recreateButtons();
+                rebuildUI();
             }
         );
     };
 
-    panel.reloadSavedCopyButton.onClick = function () {
+    controlButtonsGroup.reloadSavedCopyButton.onClick = function () {
         var newTemplates = loadFromFile();
         templates = newTemplates;
-        recreateButtons();
+        rebuildUI();
     };
 
-    panel.unlinkButton.onClick = function () {
+    controlButtonsGroup.unlinkButton.onClick = function () {
         unlinkFile();
-        recreateButtons();
+        rebuildUI();
     };
 
-    recreateButtons();
+    rebuildUI();
 }
 
 //
@@ -908,6 +1146,8 @@ function buildUI_mainPanel(panel) {
             : new Window("palette", windowTitle, undefined, {
                   resizeable: true,
               });
+
+    isDockable = panel.toString() == "[object Panel]";
 
     ensureCanWriteFiles(panel, function () {
         buildUI_mainPanel(panel);
