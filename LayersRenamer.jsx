@@ -1,3 +1,6 @@
+var scriptName = "LayersRenamer";
+var scriptVersion = "0.1";
+
 //
 // ---------- UI HELPER FUNCTIONS ----------
 //
