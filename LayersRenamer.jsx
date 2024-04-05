@@ -2,8 +2,14 @@
 // ---------- UI HELPER FUNCTIONS ----------
 //
 
-// This function calls the onSuccess callback if script can write files
+// This function checks if script can write files.
+// If it can, control is passed to onSuccess() callback.
 // If it can't, the function helps user to enable the corresponding permission
+// by showing an alert and opening Properties window.
+// If permission still is not granted, instead of creating the script's panel
+// it will show a panel with a text describing the situation, and a button that opens Properties window.
+// Finally, when permission is granted, text & button are removed (panel is cleaned), and the script continues
+// (normal panel is shown by passing control to onSuccess()).
 function ensureCanWriteFiles(panel, onSuccess) {
     const kMainPrefSection = "Main Pref Section";
     const kPrefScriptingFileNetworkSecurity =
@@ -29,44 +35,68 @@ function ensureCanWriteFiles(panel, onSuccess) {
         app.executeCommand(3131);
     }
 
-    // If permission is not granted
+    // If permissions are granted
     if (checkPermissions()) {
         onSuccess();
-    } else {
-        alert(alertText);
+        return;
+    }
+
+    // Otherwise, prompt user to grant permissions
+    alert(alertText);
+    openPreferencesAndWait();
+
+    // Recheck permissions
+    if (checkPermissions()) {
+        onSuccess();
+        return;
+    }
+
+    // Permissions still are not granted
+    // Instead of building the script's main panel, we show
+    // a text describing the situation, and a button that opens Properties window.
+    // The button will recheck permissions, and pass control to the onSuccess callback
+
+    // The separate fixPermissionsGroup is needed to easily remove text & button after success
+    // to allow main script to work from the 'clean sheet'
+    fixPermissionsGroup = panel.add("group", [0, 0, 300, 110]);
+    fixPermissionsGroup.add("statictext", [0, 0, 300, 50], alertText, {
+        multiline: true,
+    });
+    openPreferencesButton = fixPermissionsGroup.add(
+        "button",
+        [5, 50, 100, 80],
+        "Open Preferences"
+    );
+
+    // This is a wrapper callback
+    // it is needed because now we have to remove fixPermissionsGroup
+    function onSuccess2() {
+        panel.remove(fixPermissionsGroup);
+
+        // The panel was made wide because of the text,
+        // this forces the panel to reset its size
+        panel.preferredSize = { width: 0, height: 0 };
+        panel.layout.layout(true);
+
+        // Now we can call the user callback
+        onSuccess();
+    }
+
+    openPreferencesButton.onClick = function () {
+        // If permissions are already granted
+        if (checkPermissions()) {
+            onSuccess2();
+            return;
+        }
+
+        // Otherwise, help user to grant permissions
         openPreferencesAndWait();
-    }
 
-    // Recheck
-    if (checkPermissions()) {
-        onSuccess();
-    } else {
-        // The separate panel is needed to easily remove fixPermissions stuff after success
-        // to allow main script to work from the 'clean sheet'
-        fixPermissionsGroup = panel.add("group", [0, 0, 300, 110]);
-        fixPermissionsGroup.add("statictext", [0, 0, 300, 50], alertText, {
-            multiline: true,
-        });
-        a = fixPermissionsGroup.add(
-            "button",
-            [5, 50, 100, 80],
-            "Open Preferences"
-        );
-        a.onClick = function () {
-            // If permission is not granted
-            if (!checkPermissions()) {
-                openPreferencesAndWait();
-            }
-
-            // Recheck
-            if (checkPermissions()) {
-                panel.remove(fixPermissionsGroup);
-                panel.preferredSize = { width: 0, height: 0 };
-                panel.layout.layout(true);
-                onSuccess();
-            }
-        };
-    }
+        // Recheck
+        if (checkPermissions()) {
+            onSuccess2();
+        }
+    };
 }
 
 // This function creates an array of 17 (16 + None) brushes that have colors matching those in AE Label groups
