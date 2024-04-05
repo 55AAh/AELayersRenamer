@@ -295,6 +295,9 @@ function copyToTemplate(source, target) {
     target.color = source.color;
 }
 
+var wasSaved = false;
+var currentFileVersion = undefined;
+
 // This function ensures that file is selected, then opens it with the required R/W mode
 function openFile(save) {
     const sectionTag = scriptName;
@@ -351,8 +354,9 @@ function openFile(save) {
     }
 
     function tryToOpen(file) {
-        mode = save ? "w" : "r";
+        mode = save ? "a" : "r";
         if (file.open(mode)) {
+            file.close();
             return file;
         } else {
             alert(
@@ -382,7 +386,7 @@ function openFile(save) {
     return undefined;
 }
 
-function loadFromFile() {
+function loadFromFile(checkFileVersion) {
     // Obtaining file object
     var file = openFile(false);
     if (!file) {
@@ -390,7 +394,8 @@ function loadFromFile() {
         return {};
     }
 
-    // Reading (file is already open)
+    // Reading
+    file.open("r");
     dataStr = file.read();
     file.close();
 
@@ -409,8 +414,18 @@ function loadFromFile() {
             );
         }
 
+        loadedFileVersion = data.fileVersion ? data.fileVersion : 0;
+        if (checkFileVersion) {
+            // If we are trying to check the version, then only return fileVersion
+            return loadedFileVersion;
+        } else {
+            // Otherwise script will accept any version that is there
+            currentFileVersion = loadedFileVersion;
+        }
+
         newTemplates = {};
         loadedTemplates = data.templates;
+        UID_templateCount = 0;
         loadedTemplates_UIDs = Object.keys(loadedTemplates);
         for (var i = 0; i < loadedTemplates_UIDs.length; i++) {
             loadedTemplate_UID = loadedTemplates_UIDs[i];
@@ -425,6 +440,7 @@ function loadFromFile() {
             newTemplates[newTemplate_UID] = newTemplate;
         }
 
+        wasSaved = true;
         return newTemplates;
     } catch (e) {
         alert(
@@ -449,16 +465,69 @@ function saveToFile(templates) {
         return templates;
     }
 
+    // Checking version
+    var loadedFileVersion = loadFromFile(true);
+    if (currentFileVersion != loadedFileVersion) {
+        isBehind = currentFileVersion < loadedFileVersion;
+        if (isBehind) {
+            versionText =
+                "a newer (" +
+                loadedFileVersion +
+                " > " +
+                currentFileVersion +
+                ")";
+        } else {
+            versionText =
+                "an older (" +
+                loadedFileVersion +
+                " < " +
+                currentFileVersion +
+                ")";
+        }
+        alert(
+            "Trying to save to a file that contains " +
+                versionText +
+                " version!"
+        );
+
+        discardLocalChanges = confirm("Do you want to discard local changes?");
+        if (discardLocalChanges) {
+            // Reloading from file, discarding changes
+            currentFileVersion = undefined;
+            loadedTemplates = loadFromFile();
+            return loadedTemplates;
+        } else {
+            doSaveToFile = confirm(
+                "Do you want to overwrite file with local changes?"
+            );
+            if (doSaveToFile) {
+                currentFileVersion = loadedFileVersion;
+                // And then proceed to save
+            } else {
+                wasSaved = false;
+                // Stay with local version
+                return templates;
+            }
+        }
+    }
+
     // Serializing
+    currentFileVersion += 1;
     data = {
         version: scriptVersion,
+        fileVersion: currentFileVersion,
         templates: templates,
     };
     dataStr = JSON.stringify(data, undefined, 4);
 
-    // Writing (file is already open)
+    // Writing
+    file.open("w");
     file.write(dataStr);
     file.close();
+    wasSaved = true;
+
+    // Return the same templates
+    return templates;
 }
 
 // This shows a dialog that allows user to
@@ -631,6 +700,9 @@ function buildUI_mainPanel(panel) {
     // This creates a button that will reload file from saved copy
     panel.reloadSavedCopyButton = panel.add("button", [55, 5, 80, 35], "R");
 
+    // This creates a text that will indicate whether local version was saved to file
+    panel.wasSavedText = panel.add("statictext", [85, 5, 130, 35], "");
+
     // This is wrapper group for an actual panel that contains template buttons
     // This way, instead of deleting many children (buttons) from panel,
     // we delete the panel itself (one child), and then recreate it in this group
@@ -643,6 +715,8 @@ function buildUI_mainPanel(panel) {
 
     // This deletes the existing template buttons, and (re)creates them from the templates{} dict
     function recreateButtons() {
+        panel.wasSavedText.text = wasSaved ? "" : "Unsaved";
+
         var templateButtonsCount = Object.keys(templates).length;
         var totalHeight = templateButtonsCount * 35 + 20;
         templateButtonsGroup.size = { width: 160, height: totalHeight + 20 };
@@ -734,11 +808,11 @@ function buildUI_mainPanel(panel) {
                             // onSave callback
                             function (_same_template) {
                                 // The original template object will be modified
-                                // Redraw template buttons list
-                                recreateButtons();
+                                // Update saved copy or discard changes
+                                templates = saveToFile(templates);
 
-                                // Update saved copy
-                                saveToFile(templates);
+                                // Update buttons list
+                                recreateButtons();
                             },
                             // onDelete callback
                             function () {
@@ -748,11 +822,11 @@ function buildUI_mainPanel(panel) {
                                 );
                                 delete templates[right_clicked_template_UID];
 
+                                // Update saved copy or discard changes
+                                templates = saveToFile(templates);
+
                                 // Update buttons list
                                 recreateButtons();
-
-                                // Update saved copy
-                                saveToFile(templates);
                             }
                         );
                     }
@@ -780,11 +854,11 @@ function buildUI_mainPanel(panel) {
                 // Adding new template to the collection
                 templates[UID_get(newTemplate)] = newTemplate;
 
+                // Update saved copy or discard changes
+                templates = saveToFile(templates);
+
                 // Update buttons list
                 recreateButtons();
-
-                // Update saved copy
-                saveToFile(templates);
             }
         );
     };
