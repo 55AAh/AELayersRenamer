@@ -13,6 +13,23 @@ var scriptVersion = "0.1";
 // ---------- UI HELPER FUNCTIONS ----------
 //
 
+// Object.keys implementation
+if (!Object.keys) {
+    Object.keys = function (object) {
+        if (Object(object) !== object) {
+            throw new TypeError("Object.keys can only be called on Objects.");
+        }
+        var hasOwnProperty = Object.prototype.hasOwnProperty;
+        var result = [];
+        for (var prop in object) {
+            if (hasOwnProperty.call(object, prop)) {
+                result.push(prop);
+            }
+        }
+        return result;
+    };
+}
+
 // This function checks if script can write files.
 // If it can, control is passed to onSuccess() callback.
 // If it can't, the function helps user to enable the corresponding permission
@@ -141,7 +158,7 @@ function makePaletteBrushes(window) {
 
     // Create a brush for each color
     var brushes = [];
-    for (i in labelColorsRGB) {
+    for (var i = 0; i < labelColorsRGB.length; i++) {
         colorRGB = labelColorsRGB[i];
         colorFloat = RGB2Float(colorRGB);
         brush = window.graphics.newBrush(
@@ -394,8 +411,10 @@ function loadFromFile() {
 
         newTemplates = {};
         loadedTemplates = data.templates;
-        for (var i in loadedTemplates) {
-            loadedTemplate = loadedTemplates[i];
+        loadedTemplates_UIDs = Object.keys(loadedTemplates);
+        for (var i = 0; i < loadedTemplates_UIDs.length; i++) {
+            loadedTemplate_UID = loadedTemplates_UIDs[i];
+            loadedTemplate = loadedTemplates[loadedTemplate_UID];
 
             // Copying template to assign new UID
             newTemplate = {};
@@ -646,14 +665,14 @@ function buildUI_mainPanel(panel) {
 
         // This counter provides the index for each template button
         // Note that it may differ from the template's UID
-        cnt = 0;
-        for (template_UID in templates) {
-            cnt += 1;
+        templates_UIDs = Object.keys(templates);
+        for (var i = 0; i < templates_UIDs.length; i++) {
+            template_UID = templates_UIDs[i];
             currentTemplate = templates[template_UID];
 
             // This places buttons in a column
             // May be replaced in future by a more complex and customizable layout
-            buttonOffsetY = (cnt - 1) * 35;
+            buttonOffsetY = i * 35;
             buttonPosition = [5, 10 + buttonOffsetY, 150, 40 + buttonOffsetY];
             buttonText = currentTemplate.name;
             var button = templateButtonsPanel.add(
