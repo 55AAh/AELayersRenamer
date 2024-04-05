@@ -243,7 +243,15 @@ function trimString(str) {
 
 // Apply template to the current layer - This runs when user clicks on an existing template
 function applyTemplate(template) {
-    alert(template.name + " " + template.color);
+    var comp = app.project.activeItem;
+    if (comp && comp instanceof CompItem) {
+        var selectedLayers = comp.selectedLayers;
+        for (var i = 0; i < selectedLayers.length; i++) {
+            var layer = selectedLayers[i];
+            layer.name = template.name;
+            layer.label = template.color;
+        }
+    }
 }
 
 //
