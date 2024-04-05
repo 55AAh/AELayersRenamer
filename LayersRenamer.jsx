@@ -217,7 +217,13 @@ function applyTemplate(template) {
 // 3) Alt+F4 is pressed
 // 4) Delete, Cancel or Save / Add (with a valid template name) buttons are clicked
 //
-function buildUI_editTemplateDlg_show(template, isNew, onSaveAdd, onDelete) {
+function buildUI_editTemplateDlg_show(
+    paletteBrushes,
+    template,
+    isNew,
+    onSaveAdd,
+    onDelete
+) {
     if (isNew) {
         title = "New template";
     } else {
@@ -233,9 +239,6 @@ function buildUI_editTemplateDlg_show(template, isNew, onSaveAdd, onDelete) {
 
     // Creates a new dialog box
     var dlg = new Window("dialog", title);
-
-    // Creates a set of brushes used to paint a color picker
-    var paletteBrushes = makePaletteBrushes(dlg);
 
     // This is passed as a callback to buttons
     // It changes the template's color value and redraws the Selected color indicator
@@ -375,6 +378,9 @@ function buildUI_mainPanel(panel) {
     panel.preferredSize = { width: 205, height: 240 };
     panel.layout.layout(true);
 
+    // Creates a set of brushes used to paint colored buttons
+    var paletteBrushes = makePaletteBrushes(panel);
+
     // This creates a button that allow the user to add new templates
     // It will open a dialog box where the user will specify template's name and (optionally) color
     panel.addButton = panel.add("button", [5, 5, 50, 35], "New");
@@ -437,6 +443,7 @@ function buildUI_mainPanel(panel) {
                         // It will be able to modify the existing template object
                         // But this is not done by it unless Save is clicked
                         buildUI_editTemplateDlg_show(
+                            paletteBrushes,
                             right_clicked_template,
                             false, // Template is not new
                             // onSave callback
@@ -474,6 +481,7 @@ function buildUI_mainPanel(panel) {
         };
 
         buildUI_editTemplateDlg_show(
+            paletteBrushes,
             newTemplate,
             true, // Template is new
             function () {
