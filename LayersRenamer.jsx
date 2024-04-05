@@ -628,6 +628,9 @@ function buildUI_mainPanel(panel) {
     // It will open a dialog box where the user will specify template's name and (optionally) color
     panel.addButton = panel.add("button", [5, 5, 50, 35], "New");
 
+    // This creates a button that will reload file from saved copy
+    panel.reloadSavedCopyButton = panel.add("button", [55, 5, 80, 35], "R");
+
     // This is wrapper group for an actual panel that contains template buttons
     // This way, instead of deleting many children (buttons) from panel,
     // we delete the panel itself (one child), and then recreate it in this group
@@ -784,6 +787,12 @@ function buildUI_mainPanel(panel) {
                 saveToFile(templates);
             }
         );
+    };
+
+    panel.reloadSavedCopyButton.onClick = function () {
+        var newTemplates = loadFromFile();
+        templates = newTemplates;
+        recreateButtons();
     };
 
     recreateButtons();
